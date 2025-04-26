@@ -1,0 +1,188 @@
+import tkinter as tk
+from tkinter import ttk, filedialog, scrolledtext
+import xml.etree.ElementTree as ET
+import time
+import threading
+import requests
+import re
+import random
+import asyncio
+import json
+from queue import Queue
+from bilibili_api import video, Credential
+from datetime import datetime, timezone
+from urllib.parse import urlencode
+
+class BiliDanmakuRestorer:
+    def __init__(self, root):
+        self.root = root
+        root.title("B站弹幕补档工具 正式版 v4.1")
+        root.geometry("1000x850")
+        
+        # 初始化变量和UI组件
+        self.color_format = tk.IntVar(value=0)
+        self.xml_path = tk.StringVar()
+        self.create_widgets()
+        
+        # 运行时变量
+        self.running = False
+        self.stop_event = threading.Event()
+        self.log_queue = Queue()
+        self.progress_queue = Queue()
+        
+        self.root.after(100, self.process_queues)
+
+    # [界面组件代码保持不变...]
+
+    def restore_process(self):
+        """整合所有修复的核心逻辑"""
+        try:
+            if not self.check_credential_valid():
+                self.log("错误：Cookie无效")
+                return
+
+            # 获取视频信息
+            video_info = self.get_video_info_sync()
+            if not video_info:
+                self.log("错误：获取视频信息失败")
+                return
+            cid = video_info['pages'][0]['cid']
+            self.log(f"视频CID: {cid}")
+
+            # 解析弹幕
+            danmaku_list = self.parse_danmaku()
+            if not danmaku_list:
+                self.log("错误：未解析到有效弹幕")
+                return
+            
+            total = len(danmaku_list)
+            success = 0
+            
+            with requests.Session() as session:
+                # 配置请求头
+                session.headers.update({
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                    "Accept-Encoding": "gzip, deflate, br",
+                    "Accept-Language": "zh-CN,zh;q=0.9",
+                    "Connection": "keep-alive"
+                })
+
+                # 可用API端点
+                api_endpoints = [
+                    "https://api.bilibili.com/x/v2/dm/post",
+                    "https://api.bilibili.com/x/v2/dm/ajax/post"
+                ]
+
+                for idx, dm in enumerate(danmaku_list):
+                    if self.stop_event.is_set():
+                        break
+
+                    # 参数验证
+                    csrf_token = self.bili_jct_entry.get().strip()
+                    if not re.fullmatch(r'^[a-f0-9]{32}$', csrf_token):
+                        self.log(f"CSRF Token无效: {csrf_token[:4]}***")
+                        continue
+
+                    # 生成时间戳（优先服务器时间）
+                    try:
+                        server_resp = requests.get("https://api.bilibili.com/x/server/date", timeout=3)
+                        server_time = server_resp.json()["data"]
+                        ts = int(datetime.strptime(server_time, "%Y-%m-%d %H:%M:%S").timestamp() * 1000)
+                        server_info = f"服务器时间: {server_time}"
+                    except Exception as e:
+                        ts = int(datetime.now(timezone.utc).timestamp() * 1000)
+                        server_info = f"本地UTC时间: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+                    
+                    # 构造请求数据
+                    data = {
+                        "oid": cid,
+                        "type": 1,
+                        "mode": dm["mode"],
+                        "color": dm["color"],
+                        "message": dm["content"],
+                        "fontsize": dm["font_size"],
+                        "pool": dm["pool_type"],
+                        "csrf": csrf_token,
+                        "ts": ts,
+                        "rnd": random.randint(100000, 999999)
+                    }
+
+                    # 调试日志
+                    self.log("\n" + "="*40)
+                    self.log(f"时间戳信息: {ts} ({server_info})")
+                    self.log(f"颜色值验证: 0x{data['color']:06x} (0x000000-0xFFFFFF)")
+                    self.log(f"弹幕模式验证: {data['mode']} ∈ [1,4,5,6,7]")
+                    self.log(f"字体大小验证: {data['fontsize']} ∈ [20,30]")
+                    self.log(f"弹幕池验证: {data['pool']} ∈ [0,2]")
+
+                    # 参数编码验证
+                    encoded_data = urlencode(data, doseq=True)
+                    self.log(f"编码验证: {encoded_data[:200]}...")
+
+                    # 多端点尝试
+                    response = None
+                    for endpoint in api_endpoints:
+                        try:
+                            response = session.post(
+                                endpoint,
+                                headers={
+                                    "X-CSRF-Token": csrf_token,
+                                    "X-Requested-With": "XMLHttpRequest",
+                                    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                                    "Referer": f"https://www.bilibili.com/video/{self.bvid_entry.get()}",
+                                    "Origin": "https://www.bilibili.com"
+                                },
+                                cookies={
+                                    "SESSDATA": self.sessdata_entry.get().strip(),
+                                    "bili_jct": csrf_token,
+                                    "buvid3": self.buvid3_entry.get().strip()
+                                },
+                                data=encoded_data,
+                                timeout=15
+                            )
+                            response.raise_for_status()
+                            break
+                        except requests.exceptions.RequestException as e:
+                            self.log(f"端点 {endpoint} 请求失败: {str(e)}")
+                            continue
+
+                    # 处理响应
+                    if response:
+                        try:
+                            resp_json = response.json()
+                            if resp_json.get("code") == 0:
+                                success += 1
+                                self.log(f"发送成功: {dm['content'][:15]}...")
+                            else:
+                                error_data = resp_json.get("data", {})
+                                self.log(f"失败详情: [代码{resp_json['code']}] {resp_json.get('message')}")
+                                self.log(f"问题字段: {error_data.get('fields', '未知')}")
+                                self.log(f"解决建议: {error_data.get('toast', '请检查参数')}")
+                        except json.JSONDecodeError:
+                            self.log(f"响应解析失败: {response.text[:200]}...")
+
+                    # 频率控制（35-55秒）
+                    delay = 35 + random.randint(0, 20)
+                    self.progress_queue.put((idx+1)/total*100)
+                    if idx < total-1 and not self.stop_event.is_set():
+                        start = time.time()
+                        while time.time() - start < delay and not self.stop_event.is_set():
+                            time.sleep(1)
+
+            self.log(f"\n操作完成: 成功发送 {success}/{total} 条弹幕")
+
+        except Exception as e:
+            self.log(f"严重错误: {str(e)}")
+            import traceback
+            self.log(traceback.format_exc())
+        finally:
+            self.running = False
+            self.start_btn.config(text="开始补档")
+            self.progress_queue.put(100)
+
+    # 其他方法保持不变...
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = BiliDanmakuRestorer(root)
+    root.mainloop()
