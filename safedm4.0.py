@@ -7,6 +7,7 @@ import requests
 import re
 import random
 import asyncio
+import os
 import json
 from queue import Queue
 from bilibili_api import video, Credential
@@ -14,6 +15,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 class BiliDanmakuRestorer:
+    auto_shutdown_choose = False
     def __init__(self, root):
         self.root = root
         root.title("B站弹幕补档工具 正式版 v4.0")
@@ -35,6 +37,26 @@ class BiliDanmakuRestorer:
         # 启动队列处理
         self.root.after(100, self.process_queues)
 
+    def clear_log(self):
+        """清空日志"""
+        self.log_area.delete("1.0", "end")
+
+    def about_us(self):
+        """关于我们"""
+        msg = \
+        """
+        \n
+        ==============================================================================================================
+        B站弹幕补档工具 是一个开源的弹幕补档工具，基于Bilibili-API实现。遵从MIT开源协议。
+        项目地址：https://github.com/safedm/safedm
+        作者: iallemege
+        主要贡献者: mlfkhf
+
+        本工具最初用于【幻想万华镜补档项目】，现开源。
+        ==============================================================================================================
+        """
+        self.log(msg)
+    
     def create_widgets(self):
         """创建界面组件"""
         config_frame = ttk.LabelFrame(self.root, text="配置参数")
@@ -75,6 +97,10 @@ class BiliDanmakuRestorer:
         self.start_btn.pack(side="left", padx=20)
         self.progress = ttk.Progressbar(control_frame, mode="determinate")
         self.progress.pack(side="left", expand=True, fill="x", padx=10)
+        self.auto_shutdown = ttk.Checkbutton(control_frame, onvalue=True, offvalue=False ,text="自动关机", variable=self.auto_shutdown_choose)
+        self.auto_shutdown.pack(side="left", padx=10)
+        ttk.Button(config_frame, text="清空日志", command=self.clear_log).grid(row=4, column=7, padx=5)
+        ttk.Button(config_frame, text="关于我们", command=self.about_us).grid(row=4, column=12, padx=5)
 
         # 日志区
         log_frame = ttk.LabelFrame(self.root, text="运行日志")
@@ -98,7 +124,7 @@ class BiliDanmakuRestorer:
 
     def log(self, message):
         """记录日志"""
-        self.log_queue.put(f"{datetime.now().strftime('%H:%M:%S')} - {message}\n")
+        self.log_queue.put(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
 
     def validate_inputs(self):
         """验证输入有效性"""
@@ -347,6 +373,9 @@ class BiliDanmakuRestorer:
                             time.sleep(1)
 
             self.log(f"\n操作完成: 成功发送 {success}/{total} 条弹幕 ({success/total:.1%})")
+            if self.auto_shutdown_choose:
+                os.system("shutdown -s -t 0");
+                exit()
 
         except Exception as e:
             self.log(f"严重错误: {str(e)}")
