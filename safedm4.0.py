@@ -373,6 +373,8 @@ class BiliDanmakuRestorer:
                             time.sleep(1)
 
             self.log(f"\n操作完成: 成功发送 {success}/{total} 条弹幕 ({success/total:.1%})")
+            if success == 0:
+                self.log("\n不是哥们？一条没发出去吗。。。")
             if self.auto_shutdown_choose:
                 os.system("shutdown -s -t 0");
                 exit()
