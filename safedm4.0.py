@@ -33,6 +33,8 @@ class BiliDanmakuRestorer:
         self.stop_event = threading.Event()
         self.log_queue = Queue()
         self.progress_queue = Queue()
+        self.cid_list = []
+        self.pages = []
         
         # 启动队列处理
         self.root.after(100, self.process_queues)
@@ -78,6 +80,12 @@ class BiliDanmakuRestorer:
         self.bvid_entry = ttk.Entry(config_frame, width=35)
         self.bvid_entry.grid(row=3, column=1, padx=5, sticky="w")
 
+        # 分P选择
+        ttk.Label(config_frame, text="视频分P:").grid(row=3, column=3, padx=5, sticky="e")
+        self.part_combobox = ttk.Combobox(config_frame, state="readonly", width=25)
+        self.part_combobox.grid(row=3, column=4, padx=5, sticky="w")
+        ttk.Button(config_frame, text="获取分P", command=self.fetch_parts).grid(row=3, column=5, padx=5)
+
         # 文件选择
         ttk.Label(config_frame, text="弹幕文件:").grid(row=4, column=0, padx=5, pady=2, sticky="e")
         ttk.Entry(config_frame, textvariable=self.xml_path, width=45).grid(row=4, column=1, padx=5, sticky="w")
@@ -107,6 +115,27 @@ class BiliDanmakuRestorer:
         log_frame.pack(padx=10, pady=5, fill="both", expand=True)
         self.log_area = scrolledtext.ScrolledText(log_frame, height=22)
         self.log_area.pack(fill="both", expand=True)
+
+    def fetch_parts(self):
+        """获取视频分P信息"""
+        if not self.bvid_entry.get().strip():
+            self.log("请先输入BV号")
+            return
+        
+        video_info = self.get_video_info_sync()
+        if video_info and 'pages' in video_info:
+            self.pages = video_info['pages']
+            display_parts = [f"P{page['page']}: {page['part']}" for page in self.pages]
+            self.part_combobox['values'] = display_parts
+            self.cid_list = [page['cid'] for page in self.pages]
+            
+            if self.pages:
+                self.part_combobox.current(0)
+                self.log(f"发现{len(self.pages)}个分P")
+            else:
+                self.log("未找到分P信息")
+        else:
+            self.log("获取分P信息失败")
 
     def select_xml(self):
         """选择XML文件"""
@@ -140,6 +169,12 @@ class BiliDanmakuRestorer:
                 return False
         if not re.fullmatch(r'BV1[0-9A-HJ-NP-Za-km-z]{9}', self.bvid_entry.get().strip()):
             self.log("BV号格式错误")
+            return False
+        if not self.part_combobox['values']:
+            self.log("请先获取视频分P信息")
+            return False
+        if self.part_combobox.current() == -1:
+            self.log("请选择要补档的分P")
             return False
         return True
 
@@ -270,12 +305,13 @@ class BiliDanmakuRestorer:
             if not self.check_credential_valid():
                 return
 
-            # 获取视频信息
-            video_info = self.get_video_info_sync()
-            if not video_info:
+            # 获取分P信息
+            selected_index = self.part_combobox.current()
+            if selected_index == -1 or not self.cid_list:
+                self.log("无效的分P选择")
                 return
-            cid = video_info['pages'][0]['cid']
-            self.log(f"视频CID获取成功: {cid}")
+            cid = self.cid_list[selected_index]
+            self.log(f"目标分P CID: {cid}")
 
             # 解析弹幕
             danmaku_list = self.parse_danmaku()
