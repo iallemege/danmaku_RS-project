@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>B站弹幕补档工具 Web版 v5.0</title>
+    <style>
+        body {
+            font-family: "Microsoft YaHei", sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f0f2f5;
+        }
+
+        .config-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .log-panel {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: Consolas, monospace;
+        }
+
+        .form-row {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .form-row label {
+            width: 120px;
+            margin-right: 10px;
+            text-align: right;
+        }
+
+        input, select, button {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        button {
+            background: #00a1d6;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #0087b3;
+        }
+
+        .progress-bar {
+            height: 20px;
+            background: #eee;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+
+        .progress {
+            width: 0%;
+            height: 100%;
+            background: #00a1d6;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="config-panel">
+        <h2>B站弹幕补档工具 Web版 v5.0</h2>
+        
+        <div class="form-row">
+            <label>SESSDATA:</label>
+            <input type="text" id="sessdata" style="width: 400px;">
+        </div>
+
+        <div class="form-row">
+            <label>bili_jct:</label>
+            <input type="text" id="bili_jct" style="width: 400px;">
+        </div>
+
+        <div class="form-row">
+            <label>buvid3:</label>
+            <input type="text" id="buvid3" style="width: 400px;">
+        </div>
+
+        <div class="form-row">
+            <label>目标BV号:</label>
+            <input type="text" id="bvid">
+            <button onclick="fetchParts()" style="margin-left: 20px;">获取分P</button>
+        </div>
+
+        <div class="form-row">
+            <label>视频分P:</label>
+            <select id="partSelect" style="width: 300px;"></select>
+        </div>
+
+        <div class="form-row">
+            <label>弹幕文件:</label>
+            <input type="file" id="xmlFile" accept=".xml">
+        </div>
+
+        <div class="form-row">
+            <label>颜色格式:</label>
+            <label><input type="radio" name="colorFormat" value="0" checked> 十进制</label>
+            <label><input type="radio" name="colorFormat" value="1"> 十六进制</label>
+        </div>
+
+        <div class="form-row">
+            <button onclick="toggleRestore()" style="width: 120px;">开始补档</button>
+            <div class="progress-bar">
+                <div class="progress" id="progress"></div>
+            </div>
+            <label style="margin-left: 20px;">
+                <input type="checkbox" id="autoShutdown"> 自动关机
+            </label>
+        </div>
+    </div>
+
+    <div class="config-panel">
+        <h3>运行日志</h3>
+        <div class="log-panel" id="logArea"></div>
+        <button onclick="clearLog()" style="margin-top: 10px;">清空日志</button>
+    </div>
+
+    <script>
+        let isRunning = false;
+        let stopFlag = false;
+        let currentTask = null;
+
+        function log(message) {
+            const logArea = document.getElementById('logArea');
+            const timestamp = new Date().toLocaleString();
+            logArea.innerHTML += `[${timestamp}] ${message}\n`;
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('logArea').innerHTML = '';
+        }
+
+        function updateProgress(percent) {
+            document.getElementById('progress').style.width = `${percent}%`;
+        }
+
+        async function fetchParts() {
+            const bvid = document.getElementById('bvid').value;
+            if (!bvid) {
+                log('请先输入BV号');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/get_parts?bvid=${bvid}`);
+                const data = await response.json();
+                
+                const partSelect = document.getElementById('partSelect');
+                partSelect.innerHTML = data.pages.map(p => 
+                    `<option value="${p.cid}">P${p.page}: ${p.part}</option>`
+                ).join('');
+                
+                log(`发现${data.pages.length}个分P`);
+            } catch (error) {
+                log('获取分P信息失败: ' + error.message);
+            }
+        }
+
+        async function restoreProcess() {
+            const formData = new FormData();
+            formData.append('xml', document.getElementById('xmlFile').files[0]);
+            
+            try {
+                const response = await fetch('/api/parse_xml', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const danmakuList = await response.json();
+                const total = danmakuList.length;
+                let success = 0;
+
+                for (const [index, dm] of danmakuList.entries()) {
+                    if (stopFlag) break;
+
+                    const response = await fetch('/api/send_danmaku', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            dmData: dm,
+                            credential: {
+                                sessdata: document.getElementById('sessdata').value,
+                                bili_jct: document.getElementById('bili_jct').value,
+                                buvid3: document.getElementById('buvid3').value
+                            }
+                        })
+                    });
+
+                    if (response.ok) {
+                        success++;
+                        log(`发送成功: ${dm.content.substring(0,15)}...`);
+                    } else {
+                        const error = await response.json();
+                        log(`发送失败: ${error.message}`);
+                    }
+
+                    updateProgress(((index + 1) / total) * 100);
+                    await new Promise(r => setTimeout(r, 35000 + Math.random()*20000));
+                }
+
+                log(`完成：成功发送 ${success}/${total} 条弹幕`);
+            } catch (error) {
+                log('严重错误: ' + error.message);
+            } finally {
+                isRunning = false;
+                document.getElementById('startBtn').textContent = '开始补档';
+            }
+        }
+
+        function toggleRestore() {
+            if (isRunning) {
+                stopFlag = true;
+                isRunning = false;
+                document.getElementById('startBtn').textContent = '开始补档';
+            } else {
+                if (validateInputs()) {
+                    isRunning = true;
+                    stopFlag = false;
+                    document.getElementById('startBtn').textContent = '停止补档';
+                    currentTask = restoreProcess();
+                }
+            }
+        }
+
+        function validateInputs() {
+            // 实现验证逻辑
+            return true;
+        }
+    </script>
+</body>
+</html>
