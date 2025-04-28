@@ -1,0 +1,140 @@
+# 在现有代码基础上新增以下内容
+
+import json
+from concurrent.futures import ThreadPoolExecutor
+from typing import Dict, Optional
+
+class BiliDanmakuRestorer(QMainWindow):
+    def __init__(self):
+        # ...原有初始化代码...
+        
+        # 新增Webhook配置
+        self.webhook_config = {
+            'url': "",
+            'events': {
+                'task_start': False,
+                'task_end': False,
+                'danmaku_success': True,
+                'danmaku_failed': True
+            },
+            'headers': {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer <token>'
+            }
+        }
+        
+        # 线程池用于异步发送
+        self.executor = ThreadPoolExecutor(max_workers=3)
+
+    def init_config_tab(self):
+        # ...原有布局代码...
+        
+        # 新增Webhook配置区域
+        webhook_group = QGroupBox("Webhook 配置")
+        webhook_layout = QFormLayout()
+        
+        self.webhook_url_input = QLineEdit()
+        self.webhook_enable_check = QCheckBox("启用 Webhook")
+        self.event_task_start = QCheckBox("任务开始")
+        self.event_task_end = QCheckBox("任务结束")
+        self.event_dm_success = QCheckBox("弹幕发送成功")
+        self.event_dm_failed = QCheckBox("弹幕发送失败")
+        
+        webhook_layout.addRow("Webhook URL:", self.webhook_url_input)
+        webhook_layout.addRow(self.webhook_enable_check)
+        webhook_layout.addRow("触发事件:", self.event_task_start)
+        webhook_layout.addRow("", self.event_task_end)
+        webhook_layout.addRow("", self.event_dm_success)
+        webhook_layout.addRow("", self.event_dm_failed)
+        
+        webhook_group.setLayout(webhook_layout)
+        layout.addWidget(webhook_group)
+
+    def save_webhook_config(self):
+        """保存Webhook配置到内存"""
+        self.webhook_config.update({
+            'url': self.webhook_url_input.text().strip(),
+            'enabled': self.webhook_enable_check.isChecked(),
+            'events': {
+                'task_start': self.event_task_start.isChecked(),
+                'task_end': self.event_task_end.isChecked(),
+                'danmaku_success': self.event_dm_success.isChecked(),
+                'danmaku_failed': self.event_dm_failed.isChecked()
+            }
+        })
+
+    async def trigger_webhook(self, event_type: str, payload: Dict):
+        """触发Webhook的通用方法"""
+        if not self.webhook_config['enabled']:
+            return
+        
+        if not self.webhook_config['events'].get(event_type, False):
+            return
+        
+        payload.update({
+            'event_type': event_type,
+            'timestamp': int(time.time()),
+            'tool_version': '2.1'
+        })
+        
+        # 使用线程池异步发送
+        self.executor.submit(
+            self._send_webhook_request,
+            self.webhook_config['url'],
+            payload,
+            self.webhook_config['headers']
+        )
+
+    def _send_webhook_request(self, url: str, payload: Dict, headers: Dict):
+        """实际发送请求的方法"""
+        try:
+            resp = requests.post(
+                url,
+                data=json.dumps(payload),
+                headers=headers,
+                timeout=10
+            )
+            resp.raise_for_status()
+            self.log(f"Webhook发送成功: {event_type}")
+        except Exception as e:
+            self.log(f"Webhook发送失败: {str(e)}", error=True)
+
+    # 在原有方法中添加触发点
+    def restore_process(self):
+        # 任务开始触发
+        if self.webhook_config['events']['task_start']:
+            payload = {
+                'total_danmaku': len(danmaku_list),
+                'bvid': self.bvid_input.text(),
+                'current_part': self.part_combobox.currentText()
+            }
+            self.trigger_webhook('task_start', payload)
+        
+        # ...原有发送逻辑...
+        
+        # 在弹幕发送成功/失败处添加
+        if status:
+            if self.webhook_config['events']['danmaku_success']:
+                payload = {
+                    'content': dm['content'],
+                    'send_time': dm['time'],
+                    'color': dm['color']
+                }
+                self.trigger_webhook('danmaku_success', payload)
+        else:
+            if self.webhook_config['events']['danmaku_failed']:
+                payload = {
+                    'content': dm['content'],
+                    'error': '发送失败',
+                    'retries': self.retry_limit
+                }
+                self.trigger_webhook('danmaku_failed', payload)
+        
+        # 任务结束触发
+        if self.webhook_config['events']['task_end']:
+            payload = {
+                'success_count': success_count,
+                'failure_count': len(danmaku_list) - success_count,
+                'duration': time.time() - start_time
+            }
+            self.trigger_webhook('task_end', payload)
