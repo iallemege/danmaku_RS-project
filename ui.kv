@@ -1,0 +1,100 @@
+<BiliUI>:
+    orientation: 'vertical'
+    padding: 10
+    spacing: 10
+    
+    BoxLayout:
+        size_hint_y: None
+        height: 30
+        Label:
+            text: 'SESSDATA:'
+        TextInput:
+            id: sessdata
+            multiline: False
+            
+    BoxLayout:
+        size_hint_y: None
+        height: 30
+        Label:
+            text: 'bili_jct:'
+        TextInput:
+            id: bili_jct
+            multiline: False
+            
+    BoxLayout:
+        size_hint_y: None
+        height: 30
+        Label:
+            text: 'buvid3:'
+        TextInput:
+            id: buvid3
+            multiline: False
+            
+    Button:
+        text: '保存配置'
+        size_hint_y: None
+        height: 40
+        on_press: root.save_config()
+        
+    BoxLayout:
+        size_hint_y: None
+        height: 30
+        Label:
+            text: 'BV号:'
+        TextInput:
+            id: bvid
+            multiline: False
+            
+    BoxLayout:
+        size_hint_y: None
+        height: 30
+        Label:
+            text: '分P号:'
+        TextInput:
+            id: part
+            input_filter: 'int'
+            text: '1'
+            
+    BoxLayout:
+        size_hint_y: None
+        height: 30
+        Label:
+            text: '弹幕文件:'
+        Button:
+            text: '选择文件'
+            on_press: root.select_file()
+            
+    Label:
+        id: xml_path
+        text: '未选择文件'
+        size_hint_y: None
+        height: 30
+        
+    BoxLayout:
+        size_hint_y: None
+        height: 30
+        Label:
+            text: '发送间隔(秒):'
+        TextInput:
+            id: delay
+            input_filter: 'int'
+            text: '30'
+            
+    ProgressBar:
+        id: progress
+        max: 100
+        size_hint_y: None
+        height: 20
+        
+    Button:
+        id: start_btn
+        text: '开始发送'
+        size_hint_y: None
+        height: 50
+        on_press: root.start_task()
+        
+    Label:
+        id: status
+        text: '准备就绪'
+        size_hint_y: None
+        height: 30
