@@ -70,20 +70,21 @@ class BiliDanmakuRestorer(QMainWindow):
         self.setCentralWidget(central_widget)
     
     def init_sidebar(self):
-        # 侧边栏按钮
+        # 侧边栏按钮（关键修复部分）
         btn_size = 40
-        buttons = [
-            ("开始", self.toggle_restore),
-            ("清除", self.clean_checkpoint),
-            ("导出", self.export_log),
-            ("检测", self.network_check),
-            ("关于", self.show_about_dialog)
+        button_configs = [
+            ("开始", self.toggle_restore, "start_btn"),
+            ("清除", self.clean_checkpoint, "clear_btn"),
+            ("导出", self.export_log, "export_btn"),
+            ("检测", self.network_check, "check_btn"),
+            ("关于", self.show_about_dialog, "about_btn")
         ]
         
-        for text, callback in buttons:
+        for text, callback, attr_name in button_configs:
             btn = QPushButton(text)
             btn.setFixedSize(btn_size, btn_size)
             btn.clicked.connect(callback)
+            setattr(self, attr_name, btn)  # 动态设置实例属性
             self.sidebar.addWidget(btn)
         
         self.progress_bar = QProgressBar()
