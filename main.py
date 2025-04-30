@@ -19,11 +19,15 @@ from kivy.utils import platform
 from kivy.properties import ObjectProperty, BooleanProperty
 
 # ================ 字体配置 ================
-LabelBase.register(
-    name="NotoSansSC",
-    fn_regular="fonts/NotoSansSC-Regular.ttf",
-    fn_bold="fonts/NotoSansSC-Bold.ttf"
-)
+try:
+    LabelBase.register(
+        name="NotoSansSC",
+        fn_regular="fonts/NotoSansSC-Regular.ttf",
+        fn_bold="fonts/NotoSansSC-Bold.ttf"
+    )
+except:
+    print("字体配置失败, 请检查fonts目录和字体文件是否存在")
+    exit()
 
 # ================ 主界面 ================
 class BiliToolUI(BoxLayout):
