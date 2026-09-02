@@ -3,7 +3,7 @@
 窗口标题：**弹幕补档机 RS**。程序入口与发行包名称为 **DanmakuSender**。
 
 **本仓库主页：<https://github.com/iallemege/danmaku_RS-project>**  
-只在这里发版，不会发布到 [TouhouGleaners 组织](https://github.com/orgs/TouhouGleaners/repositories)。TouhouGleaners 的 `videos.json` / `xml/{cid}.xml` 仅作可选只读数据源。
+
 
 ## 下载使用（推荐）
 
