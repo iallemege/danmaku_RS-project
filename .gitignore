@@ -172,3 +172,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Project-specific
+字体.zip
+.bili_dm_cache/
+.bili_dm_checkpoint.json
+.bili_dm_checkpoint.tmp
+dm_checkpoint.pkl

@@ -2,9 +2,9 @@
 import Foundation
 
 struct BiliCredential {
-    let sessdata: String
-    let biliJct: String
-    let buvid3: String
+    var sessdata: String
+    var biliJct: String
+    var buvid3: String
 }
 
 struct VideoPart: Identifiable, Decodable {
@@ -308,21 +308,35 @@ class DanmakuXMLParser {
     
     private class ParserDelegate: NSObject, XMLParserDelegate {
         var result: [Danmaku] = []
-        
-        func parser(_ parser: XMLParser, didStartElement elementName: String, 
-                   namespaceURI: String?, qualifiedName qName: String?, 
-                   attributes attributeDict: [String : String] = [:]) {
+        private var currentP: [String] = []
+        private var currentText = ""
+        private var inDanmaku = false
+
+        func parser(_ parser: XMLParser, didStartElement elementName: String,
+                    namespaceURI: String?, qualifiedName qName: String?,
+                    attributes attributeDict: [String : String] = [:]) {
             guard elementName == "d", let p = attributeDict["p"] else { return }
-            let components = p.components(separatedBy: ",")
-            guard components.count >= 4 else { return }
-            
-            if let text = attributeDict["text"] {
-                result.append(Danmaku(
-                    time: components[0],
-                    mode: components[1],
-                    content: text
-                ))
+            currentP = p.components(separatedBy: ",")
+            currentText = ""
+            inDanmaku = true
+        }
+
+        func parser(_ parser: XMLParser, foundCharacters string: String) {
+            if inDanmaku {
+                currentText += string
             }
+        }
+
+        func parser(_ parser: XMLParser, didEndElement elementName: String,
+                    namespaceURI: String?, qualifiedName qName: String?) {
+            guard elementName == "d", inDanmaku else { return }
+            inDanmaku = false
+            guard currentP.count >= 4 else { return }
+            result.append(Danmaku(
+                time: currentP[0],
+                mode: currentP[1],
+                content: currentText.trimmingCharacters(in: .whitespacesAndNewlines)
+            ))
         }
     }
 }

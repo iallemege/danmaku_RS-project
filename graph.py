@@ -31,6 +31,7 @@ class BiliDanmakuRestorer(QMainWindow):
         self.time_bins = []
         self.histogram = None
         self.sending = False
+        self.xml_path = ""
         
         # 初始化UI
         self.init_ui()
@@ -119,6 +120,7 @@ class BiliDanmakuRestorer(QMainWindow):
     def load_danmaku_file(self):
         path, _ = QFileDialog.getOpenFileName(self, "选择弹幕文件", "", "XML文件 (*.xml)")
         if path:
+            self.xml_path = path
             self.parse_xml(path)
             
     def parse_xml(self, path):
@@ -159,7 +161,7 @@ class BiliDanmakuRestorer(QMainWindow):
             if self.validate_inputs():
                 self.sending = True
                 self.start_btn.setText("停止发送")
-                Thread(target=self.sending_thread).start()
+                Thread(target=self.sending_thread, daemon=True).start()
 
     def validate_inputs(self):
         required = [

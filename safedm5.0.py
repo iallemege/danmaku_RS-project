@@ -16,14 +16,13 @@ from datetime import datetime, timezone
 from urllib.parse import urlencode, quote_plus
 
 class BiliDanmakuRestorer:
-    auto_shutdown_choose = False
-    
     def __init__(self, root):
         self.root = root
         root.title("B站弹幕补档工具 正式版 v5.0")
         root.geometry("1100x900")
         self.color_format = tk.IntVar(value=0)
         self.xml_path = tk.StringVar()
+        self.auto_shutdown_choose = tk.BooleanVar(value=False)
         self.cid_list = []
         self.pages = []
         self.create_widgets()
@@ -38,8 +37,8 @@ class BiliDanmakuRestorer:
         config_frame.pack(pady=5, padx=10, fill="x")
 
         cookie_labels = ["SESSDATA:", "bili_jct:", "buvid3:"]
-        self.sessdata_entry = ttk.Entry(config_frame, width=55)
-        self.bili_jct_entry = ttk.Entry(config_frame, width=55)
+        self.sessdata_entry = ttk.Entry(config_frame, width=55, show="*")
+        self.bili_jct_entry = ttk.Entry(config_frame, width=55, show="*")
         self.buvid3_entry = ttk.Entry(config_frame, width=55)
         
         for i, text in enumerate(cookie_labels):
@@ -353,7 +352,7 @@ class BiliDanmakuRestorer:
                             time.sleep(max(0.5, delay - (time.time() - start)))
 
             self.log(f"\n完成：成功发送 {success}/{total} 条弹幕")
-            if self.auto_shutdown_choose and success > 0:
+            if self.auto_shutdown_choose.get() and success > 0:
                 os.system("shutdown -s -t 60")
 
         except Exception as e:
@@ -362,10 +361,37 @@ class BiliDanmakuRestorer:
             self.log(traceback.format_exc())
         finally:
             self.running = False
-            self.start_btn.config(text="开始补档")
+            self.root.after(0, lambda: self.start_btn.config(text="开始补档"))
             self.progress_queue.put(100)
 
+    def get_video_info_sync(self):
+        bvid = self.bvid_entry.get().strip()
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Cookie": (
+                f"SESSDATA={self.sessdata_entry.get().strip()}; "
+                f"bili_jct={self.bili_jct_entry.get().strip()}; "
+                f"buvid3={self.buvid3_entry.get().strip()}"
+            ),
+        }
+        try:
+            resp = requests.get(
+                f"https://api.bilibili.com/x/web-interface/view?bvid={bvid}",
+                headers=headers,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            if payload.get("code") != 0:
+                self.log(f"视频信息获取失败: {payload.get('message', '未知错误')}")
+                return None
+            return payload.get("data")
+        except Exception as e:
+            self.log(f"视频信息获取失败: {str(e)}")
+            return None
+
     def check_credential_valid(self):
+        loop = None
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -379,7 +405,8 @@ class BiliDanmakuRestorer:
             self.log(f"凭证验证失败: {str(e)}")
             return False
         finally:
-            loop.close()
+            if loop is not None:
+                loop.close()
 
 if __name__ == "__main__":
     root = tk.Tk()

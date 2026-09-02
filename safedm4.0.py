@@ -15,7 +15,6 @@ from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 class BiliDanmakuRestorer:
-    auto_shutdown_choose = False
     def __init__(self, root):
         self.root = root
         root.title("B站弹幕补档工具 正式版 v4.0")
@@ -24,6 +23,7 @@ class BiliDanmakuRestorer:
         # 初始化Tkinter变量
         self.color_format = tk.IntVar(value=0)
         self.xml_path = tk.StringVar()
+        self.auto_shutdown_choose = tk.BooleanVar(value=False)
         
         # 创建UI组件
         self.create_widgets()
@@ -296,7 +296,8 @@ class BiliDanmakuRestorer:
                     self.log(f"视频信息获取失败: {str(e)}")
                 time.sleep(2)
             finally:
-                loop.close()
+                if "loop" in locals():
+                    loop.close()
 
     def restore_process(self):
         """核心补档流程"""
@@ -411,9 +412,9 @@ class BiliDanmakuRestorer:
             self.log(f"\n操作完成: 成功发送 {success}/{total} 条弹幕 ({success/total:.1%})")
             if success == 0:
                 self.log("\n不是哥们？一条没发出去吗。。。")
-            if self.auto_shutdown_choose:
-                os.system("shutdown -s -t 0");
-                exit()
+            if self.auto_shutdown_choose.get() and success > 0:
+                self.log("系统将在60秒后关机...")
+                os.system("shutdown -s -t 60")
 
         except Exception as e:
             self.log(f"严重错误: {str(e)}")

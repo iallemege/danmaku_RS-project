@@ -13,14 +13,14 @@ import uuid
 import hashlib
 from pathlib import Path
 from queue import Queue
-from bilibili_api import video, Credential
+from bilibili_api import Credential
 from datetime import datetime, timezone
 from urllib.parse import urlencode, quote_plus
 
 # 断点续传管理器
 class RestoreManager:
-    _cache_path = Path("~/.bili_dm_cache").expanduser()
-    
+    _cache_path = Path.home() / ".bili_dm_cache" / "progress.json"
+
     @classmethod
     def save_progress(cls, bvid, cid, index, danmaku_list):
         progress_data = {
@@ -29,6 +29,7 @@ class RestoreManager:
             "index": index,
             "content_hash": cls._hash_danmaku(danmaku_list)
         }
+        cls._cache_path.parent.mkdir(parents=True, exist_ok=True)
         encrypted = cls._encrypt_data(progress_data)
         cls._cache_path.write_text(encrypted)
     
@@ -36,14 +37,14 @@ class RestoreManager:
     def load_progress(cls, current_bvid, current_cid, danmaku_list):
         if not cls._cache_path.exists():
             return None
-        
+
         try:
-            data = json.loads(cls._decrypt_data(cls._cache_path.read_text()))
-            if (data["bvid"] == current_bvid and 
+            data = json.loads(cls._cache_path.read_text(encoding="utf-8"))
+            if (data["bvid"] == current_bvid and
                 data["cid"] == current_cid and
                 data["content_hash"] == cls._hash_danmaku(danmaku_list)):
                 return data["index"]
-        except:
+        except Exception:
             pass
         return None
     
@@ -51,20 +52,9 @@ class RestoreManager:
     def _hash_danmaku(danmaku_list):
         content = "|".join(f"{d['time']}:{d['content']}" for d in danmaku_list)
         return hashlib.sha256(content.encode()).hexdigest()
-    
-    @staticmethod
-    def _encrypt_data(data):
-        data_str = json.dumps(data)
-        key = 0xAA
-        return ''.join(chr(ord(c) ^ key) for c in data_str)
-    
-    @staticmethod
-    def _decrypt_data(encrypted_str):
-        return ''.join(chr(ord(c) ^ 0xAA) for c in encrypted_str)
 
 class BiliDanmakuRestorer:
-    auto_shutdown_choose = False
-    
+
     def __init__(self, root):
         self.root = root
         root.title("B站弹幕补档工具 正式版 v5.2")
@@ -73,6 +63,7 @@ class BiliDanmakuRestorer:
         self.color_format = tk.IntVar(value=0)
         self.xml_path = tk.StringVar()
         self.resume_mode = tk.BooleanVar(value=False)
+        self.auto_shutdown_choose = tk.BooleanVar(value=False)
         
         self.cid_list = []
         self.pages = []
@@ -91,8 +82,8 @@ class BiliDanmakuRestorer:
 
         # Cookie输入
         cookie_labels = ["SESSDATA:", "bili_jct:", "buvid3:"]
-        self.sessdata_entry = ttk.Entry(config_frame, width=55)
-        self.bili_jct_entry = ttk.Entry(config_frame, width=55)
+        self.sessdata_entry = ttk.Entry(config_frame, width=55, show="*")
+        self.bili_jct_entry = ttk.Entry(config_frame, width=55, show="*")
         self.buvid3_entry = ttk.Entry(config_frame, width=55)
         
         for i, text in enumerate(cookie_labels):
@@ -347,7 +338,7 @@ class BiliDanmakuRestorer:
                     dm = danmaku_list[idx]
 
                     try:
-                        safe_content = quote_plus(dm["content"], safe='')
+                        safe_content = dm["content"]
                         data = {
                             "oid": self.cid_list[self.part_combobox.current()],
                             "type": 1,
@@ -444,8 +435,34 @@ class BiliDanmakuRestorer:
             self.log(traceback.format_exc())
         finally:
             self.running = False
-            self.start_btn.config(text="开始补档")
+            self.root.after(0, lambda: self.start_btn.config(text="开始补档"))
             self.progress_queue.put(100)
+
+    def get_video_info_sync(self):
+        bvid = self.bvid_entry.get().strip()
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Cookie": (
+                f"SESSDATA={self.sessdata_entry.get().strip()}; "
+                f"bili_jct={self.bili_jct_entry.get().strip()}; "
+                f"buvid3={self.buvid3_entry.get().strip()}"
+            ),
+        }
+        try:
+            resp = requests.get(
+                f"https://api.bilibili.com/x/web-interface/view?bvid={bvid}",
+                headers=headers,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            if payload.get("code") != 0:
+                self.log(f"视频信息获取失败: {payload.get('message', '未知错误')}")
+                return None
+            return payload.get("data")
+        except Exception as e:
+            self.log(f"视频信息获取失败: {str(e)}")
+            return None
 
     def check_credential_valid(self):
         """验证凭证有效性（新增重试机制）"""
@@ -458,12 +475,13 @@ class BiliDanmakuRestorer:
                     bili_jct=self.bili_jct_entry.get(),
                     buvid3=self.buvid3_entry.get()
                 )
-                return 	loop.run_until_complete(credential.check_valid())
+                return loop.run_until_complete(credential.check_valid())
             except Exception as e:
                 self.log(f"凭证验证失败：{str(e)}")
                 time.sleep(3)
             finally:
-                loop.close()
+                if "loop" in locals():
+                    loop.close()
         return False
 
 if __name__ == "__main__":
