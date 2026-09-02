@@ -1103,20 +1103,23 @@ class MainWindow(QMainWindow):
         if not sess or not jct:
             self._log("SESSDATA / bili_jct 不能为空", True)
             return
-        from danmaku_rs.repo.bili import BiliClient
+        proxy = self.state.resolved_proxy()
 
-        client = BiliClient(sess, jct, buvid, self.state.resolved_proxy())
-        try:
+        def job():
+            client = BiliClient(sess, jct, buvid, proxy)
             ok, msg = client.check_login()
-        except Exception as exc:
-            self._log(str(exc), True)
-            return
-        if not ok:
-            self._log(msg, True)
-            return
-        self.state.accounts.upsert(Account(client.uid, client.uname, sess, jct, client.buvid3, client.level, True))
-        self._reload_accounts()
-        self._log(msg)
+            if not ok:
+                raise RuntimeError(msg)
+            return Account(client.uid, client.uname, sess, jct, client.buvid3, client.level, True), msg
+
+        def done(pair):
+            account, msg = pair
+            self.state.accounts.upsert(account)
+            self._reload_accounts()
+            self._log(msg)
+
+        self._log("正在验证 Cookie…")
+        self._run(job, done)
 
     def _reload_accounts(self) -> None:
         self.acc_table.blockSignals(True)

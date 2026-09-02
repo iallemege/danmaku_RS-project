@@ -21,6 +21,10 @@ INVIDIOUS = (
     "https://inv.tux.pizza",
     "https://invidious.materialio.us",
 )
+PIPED = (
+    "https://pipedapi.kavin.rocks",
+    "https://pipedapi.adminforge.de",
+)
 
 
 def lucene_query(text: str) -> str:
@@ -93,7 +97,33 @@ def search_internet_archive(query: str, tokens: Sequence[str], timeout: float = 
     return hits
 
 
-def search_youtube(query: str, tokens: Sequence[str], timeout: float = 5.0, proxy: str = "") -> List[SearchHit]:
+def _youtube_hits(rows, tokens: Sequence[str], id_key: str, author_key: str) -> List[SearchHit]:
+    hits: List[SearchHit] = []
+    for row in rows[:12]:
+        if not isinstance(row, dict):
+            continue
+        video_id = str(row.get(id_key) or "")
+        if not video_id:
+            url = str(row.get("url") or "")
+            match = re.search(r"(?:v=|/shorts/)([A-Za-z0-9_-]{6,})", url)
+            video_id = match.group(1) if match else ""
+        title = str(row.get("title") or "")
+        author = str(row.get(author_key) or "")
+        if not video_id or not title:
+            continue
+        hits.append(
+            SearchHit(
+                "YouTube",
+                title,
+                f"https://www.youtube.com/watch?v={video_id}",
+                author,
+                score=score_fields(title, author, tokens, 5.0),
+            )
+        )
+    return hits
+
+
+def search_youtube(query: str, tokens: Sequence[str], timeout: float = 4.0, proxy: str = "") -> List[SearchHit]:
     q = expand_title(query)
     if not q:
         return []
@@ -108,22 +138,20 @@ def search_youtube(query: str, tokens: Sequence[str], timeout: float = 5.0, prox
                 continue
         except Exception:
             continue
-        hits: List[SearchHit] = []
-        for row in rows[:12]:
-            video_id = str(row.get("videoId") or "")
-            title = str(row.get("title") or "")
-            author = str(row.get("author") or "")
-            if not video_id or not title:
+        hits = _youtube_hits(rows, tokens, "videoId", "author")
+        if hits:
+            return hits
+    for base in PIPED:
+        try:
+            resp = session.get(f"{base}/search", params={"q": q, "filter": "videos"}, timeout=timeout)
+            if resp.status_code != 200:
                 continue
-            hits.append(
-                SearchHit(
-                    "YouTube",
-                    title,
-                    f"https://www.youtube.com/watch?v={video_id}",
-                    author or base,
-                    score=score_fields(title, author, tokens, 5.0),
-                )
-            )
+            rows = resp.json()
+            if not isinstance(rows, list):
+                continue
+        except Exception:
+            continue
+        hits = _youtube_hits(rows, tokens, "id", "uploaderName")
         if hits:
             return hits
     return []

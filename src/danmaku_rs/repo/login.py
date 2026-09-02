@@ -22,10 +22,8 @@ def cookies_from_login(session_cookies: Dict[str, str], redirect_url: str = "") 
     if redirect_url:
         query = parse_qs(urlparse(redirect_url).query)
         for key in ("SESSDATA", "bili_jct", "buvid3", "DedeUserID"):
-            if cookies.get(key):
-                continue
             values = query.get(key)
-            if values:
+            if values and values[0]:
                 cookies[key] = unquote(values[0])
     return cookies
 

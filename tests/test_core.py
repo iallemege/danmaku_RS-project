@@ -173,7 +173,7 @@ def test_qr_cookies_and_lucene():
     from danmaku_rs.service.search import lucene_query
 
     url = "https://passport.biligame.com/x/passport-login/web/crossDomain?DedeUserID=1&SESSDATA=aaa%2Cbbb&bili_jct=csrf"
-    cookies = cookies_from_login({}, url)
+    cookies = cookies_from_login({"SESSDATA": "stale"}, url)
     assert cookies["SESSDATA"] == "aaa,bbb"
     assert cookies["bili_jct"] == "csrf"
     assert "(" not in lucene_query('foo (bar):"baz"')
