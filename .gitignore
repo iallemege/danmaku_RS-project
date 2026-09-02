@@ -31,6 +31,7 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+!scripts/*.spec
 
 # Installer logs
 pip-log.txt
@@ -174,8 +175,11 @@ cython_debug/
 .pypirc
 
 # Project-specific
+.danmaku_rs/
+.danmaku_sender/
 字体.zip
 .bili_dm_cache/
 .bili_dm_checkpoint.json
 .bili_dm_checkpoint.tmp
 dm_checkpoint.pkl
+build/pyinstaller/
