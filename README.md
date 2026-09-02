@@ -61,4 +61,4 @@ legacy/                    旧版单文件存档
 
 快捷键：`Ctrl+O` 打开 XML/JSONL，`Ctrl+Enter` 开始，`Ctrl+Z` 撤销编辑，`Ctrl+,` 设置。
 
-Cookie 在 Windows 下用 DPAPI 加密后写入 `~/.danmaku_rs/`，不要提交到 Git。获取分 P / 抓取线上弹幕不强制登录。
+Cookie 在 Windows 下用 DPAPI 加密后写入 `~/.danmaku_rs/`= ，获取分 P / 抓取线上弹幕不强制登录。
